@@ -9,11 +9,18 @@ declare module figgyPudding {
     other?(key: string): boolean
   }
 
+  type OtherOpt = Required<Pick<Options, 'other'>>
+
   type Specs = {
-    [K in string]: string | {
-      default?: any
-    }
+    [K in string]: string | Spec
   }
+  interface Spec {
+    default?: any
+  }
+
+  type SpecWithDefault = Required<Pick<Spec, 'default'>>
+  type SpecDefault<S> = S extends {default(): infer R} ? R : S extends {default: infer D} ? D : unknown
+
 
   interface MapLike<K, V> {
     get(key: K): V | undefined
@@ -22,7 +29,9 @@ declare module figgyPudding {
   type SpecKeys<S> = {
     [K in keyof S]: S[K] extends string ? never : K
   }[keyof S]
-  type OtherOr<O, T> = O extends {other(key: string): boolean} ? string : T
+  type AvailableKeys<S, O, V> = O extends OtherOpt ? string : {
+    [K in SpecKeys<S>]: K extends keyof V ? K : S[K] extends SpecWithDefault ? K : never
+  }[SpecKeys<S>]
 
   type Shadow<T, U> = {
     [K in Exclude<keyof T, keyof U>]: T[K]
@@ -33,8 +42,6 @@ declare module figgyPudding {
   } & (O extends {other(key: string): boolean} ? {
     [key: string]: any
   } : {})
-
-  type SpecDefault<S> = S extends {default(): infer R} ? R : S extends {default: infer D} ? D : unknown
 
   type ProxyFiggyPudding<S, O, V> = Readonly<Proxy<S, O, V>> & FiggyPudding<S, O, V>
 
@@ -65,19 +72,19 @@ declare module figgyPudding {
     readonly __isFiggyPudding: true
     readonly [Symbol.toStringTag]: 'FiggyPudding'
 
-    get<K extends OtherOr<O, SpecKeys<S>>>(key: K): K extends keyof V ? V[K] : K extends keyof S ? SpecDefault<S[K]> : unknown
+    get<K extends AvailableKeys<S, O, V>>(key: K): K extends keyof V ? V[K] : K extends keyof S ? SpecDefault<S[K]> : unknown
     concat<P extends any[]>(...providers: P): ProxyFiggyPudding<S, O, Shadow<V, Merge<P>>>
     toJSON(): {
-      [K in SpecKeys<S>]: unknown
+      [K in AvailableKeys<S, O, V>]: K extends keyof V ? V[K] : K extends keyof S ? SpecDefault<S[K]> : unknown
     }
     forEach<This = this>(
       fn: (this: This, value: unknown, key: SpecKeys<S>, opts: this) => void,
       thisArg: This
     ): void
     entries(matcher: (key: string) => boolean): IterableIterator<[string, unknown]>
-    entries(): IterableIterator<[OtherOr<O, keyof V | SpecKeysWithDefault<S>>, unknown]>
-    [Symbol.iterator]: IterableIterator<[OtherOr<O, keyof V | SpecKeysWithDefault<S>>, unknown]>
-    keys(): IterableIterator<OtherOr<O, keyof V | SpecKeysWithDefault<S>>>
+    entries(): IterableIterator<[AvailableKeys<S, O, V>, unknown]>
+    [Symbol.iterator]: IterableIterator<[AvailableKeys<S, O, V>, unknown]>
+    keys(): IterableIterator<AvailableKeys<S, O, V>>
     values(): IterableIterator<unknown>
   }
 }
